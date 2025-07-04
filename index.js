@@ -1,11 +1,14 @@
 const { Client, Events, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const { token } = require("./token.json");
+const token = process.env.DISCORD_BOT_TOKEN
 
 const worker = require("worker_threads");
 const http = require("http");
 
+let lastData = {}
+
 const client = new Client({intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages
 ]});
 
 client.on(Events.ClientReady, client => {
@@ -17,34 +20,46 @@ client.on(Events.MessageCreate, client => {
 });
 
 client.login(token);
+let message = "";
 
-async function main() {
-    let fetched = await fetch("https://growagarden.gg/api/stock");
-    let json = await fetched.json();
-    
-    
-    let message = "In stock : "
-    for (element of json["gearStock"]) {
-        message += element['name'] + ", "
+const channelId = "1390370554393006372"
+
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  checkApiUpdates("https://growagarden.gg/api/stock")
+  setInterval(checkApiUpdates, 10000, "https://growagarden.gg/api/stock");
+});
+
+
+// funny(myjsondata)
+function funny(jsonData) {
+    message = "In stock : "
+    for (element of jsonData["gearStock"]) {
+        message += element['name'] + " (x" + element['value'] + "), "
     }
     
     message = message.substr(0, message.length-2);
-    console.log(message);
+
+    return message;
 }
 
-main()
 
-const channelId = "1390370554393006372"
-client.on('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-  const channel = await client.channels.fetch(channelId);
-  if (channel) {
-    channel.send('This is an automated message to a specific channel.');
-  } else {
-    console.error('Channel not found!');
-  }
-});
+async function checkApiUpdates(apiUrl) {
+    try {
+        const response = await fetch(apiUrl);
+        const data = await response.json();
 
+        if (JSON.stringify(data.gearStock) !== JSON.stringify(lastData.gearStock)) {
+            lastData = data;
+            message = funny(data);
+
+            const channel = await client.channels.fetch(channelId);
+            await channel.send(message);
+        }
+    } catch (error) {
+        console.error('Error fetching API data:', error.message);
+    }
+}
 
 const outputEmbed = new EmbedBuilder()
     .setColor(0x0099FF)
